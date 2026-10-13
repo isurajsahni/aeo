@@ -5,7 +5,7 @@
   "buildCommand": "npm run build -w client",
   "outputDirectory": "client/dist",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://REPLACE-WITH-RAILWAY-API-HOST/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://aeo-xt1r.onrender.com/api/:path*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "headers": [
