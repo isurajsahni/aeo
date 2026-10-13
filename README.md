@@ -166,7 +166,7 @@ Checks that don't apply (e.g. bylines on a homepage) are marked *not applicable*
 - Rate limits: 600 requests per 15 minutes per IP on the API, and 20 per 15 minutes on login/register. Behind a proxy, set `TRUST_PROXY` so client IPs are correct.
 - Every project query is scoped to its owner. Another user's project returns 404, which also hides that it exists.
 
-## Deploying: Vercel (frontend) + Railway (API)
+## Deploying: Vercel (frontend) + Render or Railway (API)
 
 Vercel serves the React app; the API runs as a Docker container on Railway (it needs a long-running process for background audits and headless Chromium, which Vercel functions can't provide). Vercel proxies `/api/*` to Railway, so the browser only ever talks to your Vercel domain and the session cookie stays first-party.
 
@@ -175,7 +175,7 @@ browser ──► your-domain (Vercel) ──/api/*──► Railway (Express + 
 ```
 
 1. **MongoDB Atlas**: create a free M0 cluster and a database user. Under *Network Access* allow `0.0.0.0/0` (Railway has no fixed IPs on the starter plans). Copy the `mongodb+srv://...` connection string and add a database name, e.g. `/aeo_audit`.
-2. **Railway** (API): *New Project → Deploy from GitHub repo*. It builds the `Dockerfile` (see `railway.json`). Set these variables:
+2. **API host.** **Render:** *New → Blueprint →* pick the repo; `render.yaml` configures the service, generates `JWT_SECRET` and asks for the rest (Starter plan or above; Free sleeps when idle). **Railway:** *New Project → Deploy from GitHub repo*. It builds the `Dockerfile` (see `railway.json`). Set these variables:
 
    | Variable | Value |
    |---|---|
@@ -189,7 +189,7 @@ browser ──► your-domain (Vercel) ──/api/*──► Railway (Express + 
    | `PAGESPEED_API_KEY` | optional, recommended |
 
    Give the service at least **1 GB RAM** (Chromium), then *Settings → Networking → Generate Domain* and copy the hostname.
-3. **vercel.json**: replace `REPLACE-WITH-RAILWAY-API-HOST` with that hostname and push.
+3. **vercel.json**: replace `REPLACE-WITH-RAILWAY-API-HOST` with the API hostname (e.g. `aeo-audit-api.onrender.com`) and push.
 4. **Vercel** (frontend): *Add New → Project →* import the repo, leave the root directory as the repo root. `vercel.json` sets the install/build commands and output. Add your custom domain under *Settings → Domains*.
 5. **Lock down sign-ups**: register your own account, then set `ALLOW_REGISTRATION=false` (or keep an allowlist) on Railway.
 
