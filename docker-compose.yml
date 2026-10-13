@@ -1,0 +1,37 @@
+# Local infrastructure for AEO Audit.
+# Ports are bound to 127.0.0.1 so the databases are never exposed on your LAN.
+services:
+  mongo:
+    image: mongo:7
+    container_name: aeo-mongo
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: aeo-redis
+    restart: unless-stopped
+    # AOF persistence keeps queued audit jobs across restarts.
+    # noeviction is required by BullMQ (it must never silently drop job keys).
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo-data:
+  redis-data:

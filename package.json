@@ -1,0 +1,28 @@
+{
+  "name": "aeo-audit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Audit a website's Answer Engine Optimization (AEO) readiness for AI assistants.",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
+    "dev:server": "npm run dev -w server",
+    "dev:client": "npm run dev -w client",
+    "build": "npm run build -w client",
+    "start": "npm run start -w server",
+    "seed": "npm run seed -w server",
+    "test": "npm test -w server",
+    "services:up": "docker compose up -d",
+    "services:down": "docker compose down",
+    "db:local": "npm run db:local -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}
