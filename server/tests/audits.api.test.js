@@ -4,7 +4,7 @@ import { clearTestDB, startTestDB, stopTestDB } from './helpers/db.js';
 
 // Don't actually crawl anything: capture enqueued audits instead.
 const enqueueAudit = jest.fn();
-jest.unstable_mockModule('../services/auditRunner.js', () => ({ enqueueAudit, initAuditRunner: jest.fn(), recoverInterruptedAudits: jest.fn(), closeAuditRunner: jest.fn() }));
+jest.unstable_mockModule('../services/auditRunner.js', () => ({ enqueueAudit, enqueueVisibilityRun: jest.fn(), initAuditRunner: jest.fn(), recoverInterruptedAudits: jest.fn(), closeAuditRunner: jest.fn() }));
 
 const { createApp } = await import('../app.js');
 const { Audit } = await import('../models/Audit.js');

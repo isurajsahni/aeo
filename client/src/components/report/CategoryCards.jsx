@@ -4,7 +4,7 @@ import { ScoreBar } from './ScoreGauge.jsx';
 
 export function CategoryCards({ categories, activeCategory, onSelect }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+    <div className={cn('grid gap-3 sm:grid-cols-2', categories.length > 5 ? 'md:grid-cols-3 xl:grid-cols-6' : 'lg:grid-cols-5')}>
       {categories.map((category) => {
         const active = activeCategory === category.id;
         return (

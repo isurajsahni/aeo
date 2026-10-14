@@ -1,10 +1,12 @@
 import { config } from '../config/index.js';
 import { runAudit } from '../audit/runAudit.js';
 import { Audit } from '../models/Audit.js';
+import { VisibilityRun } from '../models/VisibilityRun.js';
+import { runVisibility } from '../visibility/runVisibility.js';
 import { logger } from '../utils/logger.js';
 
 /**
- * Where audits run. Two drivers behind one interface:
+ * Where background work (audits, AI visibility runs) runs. Two drivers behind one interface:
  *  - bullmq: jobs in Redis, processed by a BullMQ worker (in this process or `npm run worker`).
  *    Survives restarts and scales to several workers.
  *  - inline: an in-process queue with a concurrency limit. No Redis needed; audits in
@@ -38,12 +40,14 @@ export async function initAuditRunner({ startWorker = config.queue.runWorker } =
 const waiting = [];
 let active = 0;
 
+const HANDLERS = { audit: runAudit, visibility: runVisibility };
+
 function drainInline() {
   while (active < config.crawler.maxConcurrentAudits && waiting.length) {
-    const auditId = waiting.shift();
+    const { kind, id } = waiting.shift();
     active += 1;
-    runAudit(auditId)
-      .catch((err) => logger.error({ err, auditId }, 'Audit runner error'))
+    HANDLERS[kind](id)
+      .catch((err) => logger.error({ err, kind, id }, 'Background job error'))
       .finally(() => {
         active -= 1;
         drainInline();
@@ -57,7 +61,16 @@ export async function enqueueAudit(auditId) {
     await queueModule.addAuditJob(auditId);
     return;
   }
-  waiting.push(String(auditId));
+  waiting.push({ kind: 'audit', id: String(auditId) });
+  setImmediate(drainInline);
+}
+
+export async function enqueueVisibilityRun(runId) {
+  if (driver === 'bullmq') {
+    await queueModule.addVisibilityJob(runId);
+    return;
+  }
+  waiting.push({ kind: 'visibility', id: String(runId) });
   setImmediate(drainInline);
 }
 
@@ -71,17 +84,22 @@ const interrupted = {
  * On boot: audits stuck "queued"/"running" with no live job can never finish, so fail them.
  * With BullMQ, audits whose job still exists are left alone; the worker will pick them up.
  */
-export async function recoverInterruptedAudits() {
-  const inFlight = await Audit.find({ status: { $in: ['queued', 'running'] } }).select('_id');
+async function recover(Model, getState, label) {
+  const inFlight = await Model.find({ status: { $in: ['queued', 'running'] } }).select('_id');
   const orphaned = [];
   for (const { _id } of inFlight) {
-    const state = driver === 'bullmq' ? await queueModule.getAuditJobState(_id) : null;
+    const state = driver === 'bullmq' ? await getState(_id) : null;
     if (!state || state === 'completed' || state === 'failed') orphaned.push(_id);
   }
   if (orphaned.length) {
-    await Audit.updateMany({ _id: { $in: orphaned } }, interrupted);
-    logger.warn({ count: orphaned.length }, 'Marked interrupted audits as failed');
+    await Model.updateMany({ _id: { $in: orphaned } }, interrupted);
+    logger.warn({ count: orphaned.length }, `Marked interrupted ${label} as failed`);
   }
+}
+
+export async function recoverInterruptedAudits() {
+  await recover(Audit, (id) => queueModule.getAuditJobState(id), 'audits');
+  await recover(VisibilityRun, (id) => queueModule.getVisibilityJobState(id), 'visibility runs');
 }
 
 export async function closeAuditRunner() {

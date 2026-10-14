@@ -4,6 +4,10 @@ import { domainField } from './common.js';
 
 const name = z.string({ error: 'Name is required' }).trim().min(1, 'Name is required').max(100, 'Name is too long');
 const notes = z.string().trim().max(2000, 'Notes must be at most 2000 characters');
+const brandTerms = z
+  .array(z.string().trim().min(2, 'Too short').max(80, 'Too long'))
+  .max(10, 'Up to 10 brand names')
+  .transform((list) => [...new Set(list)]);
 const competitors = z
   .array(domainField)
   .max(MAX_COMPETITORS, `You can add up to ${MAX_COMPETITORS} competitors`)
@@ -13,6 +17,7 @@ export const createProjectSchema = z.object({
   name,
   domain: domainField,
   competitors: competitors.default([]),
+  brandTerms: brandTerms.default([]),
   notes: notes.default(''),
 });
 
@@ -22,6 +27,7 @@ export const updateProjectSchema = z
     name: name.optional(),
     domain: domainField.optional(),
     competitors: competitors.optional(),
+    brandTerms: brandTerms.optional(),
     notes: notes.optional(),
   })
   .refine((body) => Object.values(body).some((value) => value !== undefined), {

@@ -1,7 +1,7 @@
-import { ArrowLeft, ExternalLink, GitCompareArrows, Pencil, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ExternalLink, GitCompareArrows, Pencil, Play, Sparkles, Trash2 } from 'lucide-react';
 import { lazy, Suspense, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { auditsApi, projectsApi } from '../api/endpoints.js';
+import { auditsApi, projectsApi, visibilityApi } from '../api/endpoints.js';
 import { AuditHistory } from '../components/projects/AuditHistory.jsx';
 import { DeleteProjectModal } from '../components/projects/DeleteProjectModal.jsx';
 import { ProjectForm } from '../components/projects/ProjectForm.jsx';
@@ -24,6 +24,8 @@ export default function ProjectDetailPage() {
   const [runningAudit, setRunningAudit] = useState(false);
   const { data, error, loading, reload, setData } = useAsync((signal) => projectsApi.get(projectId, { signal }), [projectId]);
   const audits = useAsync((signal) => auditsApi.listForProject(projectId, { signal }), [projectId]);
+  const visibilityRuns = useAsync((signal) => visibilityApi.listRuns(projectId, { signal }), [projectId]);
+  const latestVisibility = visibilityRuns.data?.runs?.find((r) => r.status === 'completed');
   const project = data?.project;
 
   if (loading && !project) return <PageLoader label="Loading project…" />;
@@ -139,6 +141,23 @@ export default function ProjectDetailPage() {
           />
         </Card>
 
+        <div className="space-y-6">
+        <Link to={`/projects/${project.id}/visibility`} className="group block rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-200 transition hover:shadow-md hover:ring-brand-200">
+          <div className="flex items-center gap-3">
+            <span className="flex size-9 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+              <Sparkles className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-slate-900">AI visibility</p>
+              <p className="text-xs text-slate-500">
+                {latestVisibility
+                  ? `Mentioned in ${Math.round(latestVisibility.summary.totals.mentionRate * 100)}% of AI answers`
+                  : 'Test how often ChatGPT, Claude, Perplexity and Gemini mention this business'}
+              </p>
+            </div>
+            <ChevronRight className="size-4 text-slate-300 group-hover:text-brand-600" />
+          </div>
+        </Link>
         <Card>
           <CardHeader title="Details" />
           <dl className="divide-y divide-slate-100 text-sm">
@@ -166,6 +185,7 @@ export default function ProjectDetailPage() {
             <DetailRow label="Last updated">{formatDate(project.updatedAt)}</DetailRow>
           </dl>
         </Card>
+        </div>
       </div>
 
       <Modal open={editing} onClose={() => setEditing(false)} title="Edit project">

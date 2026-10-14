@@ -6,7 +6,7 @@ import { Alert } from '../ui/States.jsx';
 import { TagInput } from '../ui/TagInput.jsx';
 
 const MAX_COMPETITORS = 10;
-const EMPTY = { name: '', domain: '', competitors: [], notes: '' };
+const EMPTY = { name: '', domain: '', competitors: [], brandTerms: [], notes: '' };
 
 /** Create/edit form. `onSubmit(values)` should return a promise; API field errors are shown inline. */
 export function ProjectForm({ initialValues, onSubmit, onCancel, submitLabel = 'Save project' }) {
@@ -76,6 +76,17 @@ export function ProjectForm({ initialValues, onSubmit, onCancel, submitLabel = '
         onChange={setField('competitors')}
         error={errors.competitors}
         max={MAX_COMPETITORS}
+      />
+      <TagInput
+        label="Other brand names (optional)"
+        placeholder="Smile Dental Clinic, press Enter"
+        hint="Names AI assistants might use for this business. The project name and domain are always matched."
+        value={values.brandTerms}
+        onChange={setField('brandTerms')}
+        error={errors.brandTerms}
+        max={10}
+        splitOnSpaces={false}
+        lowercase={false}
       />
       <TextAreaField
         label="Notes (optional)"

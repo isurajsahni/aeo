@@ -8,6 +8,8 @@ import { gatherContext } from './context.js';
 import { crawlSite } from './crawler/siteCrawler.js';
 import { runChecks } from './runChecks.js';
 import { scoreAudit } from './scoring/index.js';
+import { latestRecentRun } from '../services/visibility.service.js';
+import { visibilityChecks } from '../visibility/checks.js';
 
 const siteLabel = (url) => new URL(url).hostname.replace(/^www\./, '');
 const issueCounts = (results) => ({
@@ -92,6 +94,11 @@ export async function runAudit(auditId, { gather = gatherContext, crawl = crawlS
 
   try {
     const outcome = audit.crawlConfig.mode === 'site' ? await auditSite(audit, { crawl, onProgress }) : await auditSinglePage(audit, { gather, onProgress });
+
+    // Category F comes from the latest recent AI visibility test (skipped when there is none).
+    const visibilityRun = await latestRecentRun(audit.project);
+    outcome.results.push(...runChecks({ visibility: visibilityRun?.summary ?? null }, { checks: visibilityChecks }));
+
     const scores = scoreAudit(outcome.results, { label: siteLabel(outcome.finalUrl) });
 
     const completedAt = new Date();
@@ -106,6 +113,7 @@ export async function runAudit(auditId, { gather = gatherContext, crawl = crawlS
         summary: scores.summary,
         pageCount: outcome.pageCount,
         crawlStats: outcome.crawlStats,
+        visibilityRun: visibilityRun?._id ?? null,
         completedAt,
         durationMs: completedAt - startedAt,
         progress: { stage: 'done', message: 'Audit complete', percent: 100 },

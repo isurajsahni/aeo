@@ -1,10 +1,14 @@
 import { Queue, Worker } from 'bullmq';
 import { config } from '../config/index.js';
 import { runAudit } from '../audit/runAudit.js';
+import { runVisibility } from '../visibility/runVisibility.js';
 import { logger } from '../utils/logger.js';
 import { createRedisConnection } from './connection.js';
 
+// One queue carries both kinds of background work; the job name says which.
 export const AUDIT_QUEUE = 'audits';
+const VISIBILITY_JOB = 'visibility';
+const visibilityJobId = (runId) => `visibility-${runId}`;
 
 let queue = null;
 let worker = null;
@@ -37,22 +41,28 @@ export function getAuditQueue() {
 /** jobId = auditId, so one audit can never be queued twice. */
 export const addAuditJob = (auditId) => getAuditQueue().add('audit', { auditId: String(auditId) }, { jobId: String(auditId) });
 
-/** BullMQ state of an audit's job ('waiting', 'active', 'completed'...), or null if there is none. */
-export async function getAuditJobState(auditId) {
-  const job = await getAuditQueue().getJob(String(auditId));
+export const addVisibilityJob = (runId) => getAuditQueue().add(VISIBILITY_JOB, { runId: String(runId) }, { jobId: visibilityJobId(runId) });
+
+async function jobState(jobId) {
+  const job = await getAuditQueue().getJob(jobId);
   return job ? job.getState() : null;
 }
+
+/** BullMQ state of an audit's job ('waiting', 'active', 'completed'...), or null if there is none. */
+export const getAuditJobState = (auditId) => jobState(String(auditId));
+export const getVisibilityJobState = (runId) => jobState(visibilityJobId(runId));
 
 /** The consumer side. Runs in the API process (RUN_WORKER=true) or in `npm run worker`. */
 export function startAuditWorker() {
   if (worker) return worker;
-  worker = new Worker(AUDIT_QUEUE, (job) => runAudit(job.data.auditId), {
+  const processor = (job) => (job.name === VISIBILITY_JOB ? runVisibility(job.data.runId) : runAudit(job.data.auditId));
+  worker = new Worker(AUDIT_QUEUE, processor, {
     connection: connect(),
     concurrency: config.crawler.maxConcurrentAudits,
     // Site crawls run for minutes; BullMQ renews the lock while the job is alive.
     lockDuration: 60_000,
   });
-  worker.on('failed', (job, err) => logger.error({ err, auditId: job?.data?.auditId }, 'Audit job failed'));
+  worker.on('failed', (job, err) => logger.error({ err, job: job?.name, id: job?.data?.auditId ?? job?.data?.runId }, 'Background job failed'));
   worker.on('error', (err) => logger.error({ err }, 'Audit worker error'));
   logger.info({ concurrency: config.crawler.maxConcurrentAudits }, 'Audit worker started');
   return worker;

@@ -26,3 +26,22 @@ export const auditsApi = {
   page: (id, pageId, options) => api.get(`/audits/${id}/pages/${pageId}`, options),
   remove: (id) => api.delete(`/audits/${id}`),
 };
+
+export const promptsApi = {
+  list: (projectId, options) => api.get(`/projects/${projectId}/prompts`, options),
+  create: (projectId, data) => api.post(`/projects/${projectId}/prompts`, data),
+  update: (projectId, promptId, data) => api.patch(`/projects/${projectId}/prompts/${promptId}`, data),
+  remove: (projectId, promptId) => api.delete(`/projects/${projectId}/prompts/${promptId}`),
+};
+
+export const visibilityApi = {
+  providers: (options) => api.get('/visibility/providers', options),
+  listRuns: (projectId, options) => api.get(`/projects/${projectId}/visibility-runs`, options),
+  start: (projectId, data) => api.post(`/projects/${projectId}/visibility-runs`, data),
+  get: (runId, options) => api.get(`/visibility/runs/${runId}`, options),
+  status: (runId, options) => api.get(`/visibility/runs/${runId}/status`, options),
+  results: (runId, { prompt, provider } = {}, options) => {
+    const query = new URLSearchParams(Object.entries({ prompt, provider }).filter(([, v]) => v));
+    return api.get(`/visibility/runs/${runId}/results${query.size ? `?${query}` : ''}`, options);
+  },
+};

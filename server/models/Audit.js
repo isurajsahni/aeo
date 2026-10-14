@@ -72,6 +72,8 @@ const auditSchema = new mongoose.Schema(
     ],
     checks: [checkResultSchema],
     pageCount: { type: Number, default: 0 },
+    // The AI visibility test that category F was scored from, if any.
+    visibilityRun: { type: mongoose.Schema.Types.ObjectId, ref: 'VisibilityRun', default: null },
     crawlStats: {
       type: new mongoose.Schema({ audited: Number, failed: Number, discovered: Number, skippedByRobots: Number }, { _id: false }),
       default: null,

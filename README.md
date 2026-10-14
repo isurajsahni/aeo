@@ -2,8 +2,8 @@
 
 Audit a website's **Answer Engine Optimization** readiness: how well it can be found, understood and cited by AI assistants such as ChatGPT, Claude, Perplexity and Gemini. Built for agencies auditing client websites.
 
-> **Status: Phase 3 of 5.** Auth, projects, a 31-check audit engine, single-page audits and site crawls on a BullMQ queue, live progress, audit history with trends, and audit comparison.
-> Next: AI visibility testing (Phase 4), then competitors, PDF export and scheduling (Phase 5).
+> **Status: Phase 4 of 5.** Auth, projects, a 31-check audit engine (single page or site crawl) on a BullMQ queue, live progress, history, trends and comparison, plus AI visibility testing across ChatGPT, Claude, Perplexity and Gemini (category F).
+> Next: competitor comparison, white-label PDF export and scheduled re-audits (Phase 5).
 
 ## Stack
 
@@ -133,6 +133,13 @@ All responses are JSON. Errors always look like this:
 | GET | `/api/audits/:id/events` | ✓ | Server-Sent Events: `progress` events until a final `done` |
 | GET | `/api/audits/:id/pages` | ✓ | per-page results, worst first (no check payloads) |
 | GET | `/api/audits/:id/pages/:pageId` | ✓ | one page with all its check results |
+| GET/POST | `/api/projects/:id/prompts` | ✓ | list / add target prompts `{ text, location?: { city, region, country }, active? }` |
+| PATCH/DELETE | `/api/projects/:id/prompts/:promptId` | ✓ | edit, pause or delete a prompt |
+| GET | `/api/visibility/providers` | ✓ | AI assistants configured on this server |
+| POST | `/api/projects/:id/visibility-runs` | ✓ | `{ providers?, runsPerPrompt?, promptIds? }`: starts a test (202); 409 if one is running |
+| GET | `/api/projects/:id/visibility-runs` | ✓ | test history with headline rates |
+| GET | `/api/visibility/runs/:id` (`/status`) | ✓ | full summary (or lightweight progress) |
+| GET | `/api/visibility/runs/:id/results?prompt=&provider=` | ✓ | the stored answers with their analysis |
 | DELETE | `/api/audits/:id` | ✓ | |
 
 Domains can be entered as `example.com` or as a full URL. They are stored as a bare lowercase hostname. Localhost, private-network suffixes, raw IP addresses and non-http(s) schemes are rejected. The Phase 2 crawler adds DNS-level SSRF checks on every request and after every redirect.
@@ -154,6 +161,29 @@ Weights and grade bands live in [`server/config/scoring.json`](server/config/sco
 | E. Technical Basics | HTTPS + redirect + HSTS, status/redirect chain, title and meta description length, Core Web Vitals, canonical, Open Graph, lang/viewport |
 
 Checks that don't apply (e.g. bylines on a homepage) are marked *not applicable* and excluded from the score.
+
+### AI visibility (category F)
+
+On a project's **AI visibility** page you add target prompts, such as "best dentist in Ludhiana", with an optional city and country. A test asks every active prompt *N* times (default 3) to each selected assistant, with web search on, the way a customer would ask it. Each answer is checked for:
+
+- a **brand mention**: the project name, the domain, its first label, and any extra brand names on the project, matched as whole words
+- the **position** among the answer's list items, if it's a ranked list
+- whether the client's **domain is cited** as a source, and where in the source list
+- **competitors** mentioned, from the project's competitor domains
+- **sentiment** around the mention, from a word list (no extra model call)
+
+Results are **rates over repeated asks**, not yes/no: a mention rate and citation rate per assistant, per prompt, and per prompt × assistant, plus share of voice against competitors. Every answer is stored and can be read in the UI.
+
+| Provider | API | Default model (override with `*_MODEL`) |
+|---|---|---|
+| OpenAI (ChatGPT) | Responses API + `web_search` tool | `gpt-5.5` |
+| Anthropic (Claude) | Messages API + `web_search_20260209`, server-side refusal fallbacks | `claude-opus-5-5` |
+| Perplexity | Sonar API (`/v1/sonar`), search built in | `sonar` |
+| Google (Gemini) | Interactions API + `google_search` | `gemini-3.8-flash` |
+
+A provider is enabled when its API key is set; `VISIBILITY_PROVIDERS` restricts the set. Adapters live in `server/providers/` behind one interface (`ask({ prompt, location }) -> { text, citations, model, usage }`), so adding a provider is one class plus one line in the registry. Each request uses web search and is billed to your keys; the run dialog shows the request count first, and `VISIBILITY_MAX_CALLS_PER_RUN` caps it.
+
+**Scoring:** an audit includes category F from the project's latest completed test no older than `VISIBILITY_MAX_AGE_DAYS` (default 30). It has five checks: mention rate (full marks at 60%), citation rate (40%), assistant coverage, share of voice (50%), and sentiment. With no recent test they're skipped and category F doesn't affect the score.
 
 ### Site crawls
 

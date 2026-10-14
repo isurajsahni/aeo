@@ -1,12 +1,30 @@
 {
   "$comment": "Scoring weights. Edit freely: no code changes needed. Category weights are relative to each other; check weights are relative within their category. A weight of 0 disables a check's effect on the score.",
   "categories": {
-    "crawlerAccess": { "name": "AI Crawler Access", "weight": 25 },
-    "structuredData": { "name": "Structured Data", "weight": 20 },
-    "content": { "name": "Answer-Ready Content", "weight": 25 },
-    "trust": { "name": "Trust & Authority", "weight": 15 },
-    "technical": { "name": "Technical Basics", "weight": 15 },
-    "aiVisibility": { "name": "AI Visibility", "weight": 20 }
+    "crawlerAccess": {
+      "name": "AI Crawler Access",
+      "weight": 25
+    },
+    "structuredData": {
+      "name": "Structured Data",
+      "weight": 20
+    },
+    "content": {
+      "name": "Answer-Ready Content",
+      "weight": 25
+    },
+    "trust": {
+      "name": "Trust & Authority",
+      "weight": 15
+    },
+    "technical": {
+      "name": "Technical Basics",
+      "weight": 15
+    },
+    "aiVisibility": {
+      "name": "AI Visibility",
+      "weight": 20
+    }
   },
   "checks": {
     "ai-crawler-robots": 5,
@@ -14,14 +32,12 @@
     "js-rendering": 4,
     "sitemap": 3,
     "llms-txt": 2,
-
     "jsonld-present": 4,
     "organization-schema": 4,
     "schema-completeness": 3,
     "content-schema": 3,
     "schema-dates": 2,
     "breadcrumb-schema": 1,
-
     "direct-answers": 5,
     "question-headings": 4,
     "answer-formats": 3,
@@ -29,13 +45,11 @@
     "content-depth": 3,
     "content-freshness": 3,
     "readability": 2,
-
     "author-byline": 4,
     "about-contact": 4,
     "reviews-testimonials": 3,
     "outbound-citations": 2,
     "privacy-policy": 1,
-
     "https": 4,
     "status-redirects": 4,
     "meta-title": 3,
@@ -43,13 +57,33 @@
     "meta-description": 2,
     "canonical": 2,
     "open-graph": 2,
-    "html-basics": 1
+    "html-basics": 1,
+    "ai-mention-rate": 5,
+    "ai-citation-rate": 4,
+    "ai-provider-coverage": 3,
+    "ai-share-of-voice": 3,
+    "ai-sentiment": 2
   },
   "grades": [
-    { "min": 90, "grade": "A" },
-    { "min": 80, "grade": "B" },
-    { "min": 70, "grade": "C" },
-    { "min": 60, "grade": "D" },
-    { "min": 0, "grade": "F" }
+    {
+      "min": 90,
+      "grade": "A"
+    },
+    {
+      "min": 80,
+      "grade": "B"
+    },
+    {
+      "min": 70,
+      "grade": "C"
+    },
+    {
+      "min": 60,
+      "grade": "D"
+    },
+    {
+      "min": 0,
+      "grade": "F"
+    }
   ]
 }

@@ -1,5 +1,8 @@
 import { Audit } from '../models/Audit.js';
+import { AiResult } from '../models/AiResult.js';
 import { Page } from '../models/Page.js';
+import { Prompt } from '../models/Prompt.js';
+import { VisibilityRun } from '../models/VisibilityRun.js';
 import { Project } from '../models/Project.js';
 import { AppError } from '../utils/AppError.js';
 
@@ -54,7 +57,7 @@ export async function updateProject(userId, projectId, changes) {
 
 export async function deleteProject(userId, projectId) {
   const project = await findOwnedProject(userId, projectId);
-  // Later phases also remove the project's prompts and AI results here.
-  await Promise.all([Page.deleteMany({ project: project._id }), Audit.deleteMany({ project: project._id })]);
+  const byProject = { project: project._id };
+  await Promise.all([Page, Audit, Prompt, VisibilityRun, AiResult].map((Model) => Model.deleteMany(byProject)));
   await project.deleteOne();
 }

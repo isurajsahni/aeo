@@ -19,6 +19,8 @@ const projectSchema = new mongoose.Schema(
       },
     },
     notes: { type: String, trim: true, maxlength: 2000, default: '' },
+    // Extra names the brand goes by in AI answers (the project name and domain are always used).
+    brandTerms: { type: [String], default: [] },
     // Denormalized snapshot of the latest completed audit, for the projects list.
     lastAudit: {
       type: new mongoose.Schema(

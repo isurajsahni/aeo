@@ -64,6 +64,25 @@ const envSchema = z.object({
   // In site crawls, only the first N pages are rendered in headless Chromium (it is slow).
   RENDER_MAX_PAGES: z.coerce.number().int().min(0).max(100).default(3),
 
+  // --- AI visibility testing (category F) ---
+  // A provider is enabled when its API key is set. VISIBILITY_PROVIDERS optionally restricts the set.
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default('gpt-5.5'),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().default('claude-opus-5-5'),
+  PERPLEXITY_API_KEY: z.string().optional(),
+  PERPLEXITY_MODEL: z.string().default('sonar'),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
+  VISIBILITY_PROVIDERS: z.string().default(''),
+  VISIBILITY_RUNS_PER_PROMPT: z.coerce.number().int().min(1).max(10).default(3),
+  VISIBILITY_MAX_PROMPTS: z.coerce.number().int().min(1).max(500).default(50),
+  VISIBILITY_MAX_CALLS_PER_RUN: z.coerce.number().int().min(1).max(5000).default(400),
+  VISIBILITY_CONCURRENCY: z.coerce.number().int().min(1).max(20).default(3),
+  VISIBILITY_TIMEOUT_MS: z.coerce.number().int().min(5000).max(600_000).default(120_000),
+  // An audit includes category F from the latest visibility run no older than this.
+  VISIBILITY_MAX_AGE_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+
   // --- Google PageSpeed Insights ---
   PAGESPEED_ENABLED: booleanish.default(true),
   PAGESPEED_API_KEY: z.string().optional(),
@@ -138,6 +157,21 @@ export const config = Object.freeze({
     enabled: env.RENDER_ENABLED,
     timeoutMs: env.RENDER_TIMEOUT_MS,
     maxPages: env.RENDER_MAX_PAGES,
+  }),
+  visibility: Object.freeze({
+    providers: Object.freeze({
+      openai: { apiKey: env.OPENAI_API_KEY || undefined, model: env.OPENAI_MODEL },
+      anthropic: { apiKey: env.ANTHROPIC_API_KEY || undefined, model: env.ANTHROPIC_MODEL },
+      perplexity: { apiKey: env.PERPLEXITY_API_KEY || undefined, model: env.PERPLEXITY_MODEL },
+      gemini: { apiKey: env.GEMINI_API_KEY || undefined, model: env.GEMINI_MODEL },
+    }),
+    only: env.VISIBILITY_PROVIDERS.split(',').map((p) => p.trim().toLowerCase()).filter(Boolean),
+    runsPerPrompt: env.VISIBILITY_RUNS_PER_PROMPT,
+    maxPrompts: env.VISIBILITY_MAX_PROMPTS,
+    maxCallsPerRun: env.VISIBILITY_MAX_CALLS_PER_RUN,
+    concurrency: env.VISIBILITY_CONCURRENCY,
+    timeoutMs: env.VISIBILITY_TIMEOUT_MS,
+    maxAgeDays: env.VISIBILITY_MAX_AGE_DAYS,
   }),
   pageSpeed: Object.freeze({
     enabled: env.PAGESPEED_ENABLED,
