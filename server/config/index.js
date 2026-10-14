@@ -49,10 +49,20 @@ const envSchema = z.object({
   MAX_RESPONSE_BYTES: z.coerce.number().int().min(10_000).default(5 * 1024 * 1024),
   MAX_REDIRECTS: z.coerce.number().int().min(0).max(10).default(5),
   MAX_CONCURRENT_AUDITS: z.coerce.number().int().min(1).max(20).default(2),
+  DEFAULT_CRAWL_PAGES: z.coerce.number().int().min(2).max(500).default(25),
+  MAX_CRAWL_PAGES: z.coerce.number().int().min(2).max(500).default(100),
+
+  // --- Job queue (BullMQ + Redis) ---
+  // auto = BullMQ when Redis is reachable, otherwise an in-process runner (with a warning).
+  QUEUE_DRIVER: z.enum(['auto', 'bullmq', 'inline']).default('auto'),
+  // Run the audit worker inside the API process. Set false when running `npm run worker` separately.
+  RUN_WORKER: booleanish.default(true),
 
   // --- JS rendering (Playwright) ---
   RENDER_ENABLED: booleanish.default(true),
   RENDER_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120_000).default(25_000),
+  // In site crawls, only the first N pages are rendered in headless Chromium (it is slow).
+  RENDER_MAX_PAGES: z.coerce.number().int().min(0).max(100).default(3),
 
   // --- Google PageSpeed Insights ---
   PAGESPEED_ENABLED: booleanish.default(true),
@@ -117,10 +127,17 @@ export const config = Object.freeze({
     maxBytes: env.MAX_RESPONSE_BYTES,
     maxRedirects: env.MAX_REDIRECTS,
     maxConcurrentAudits: env.MAX_CONCURRENT_AUDITS,
+    defaultCrawlPages: Math.min(env.DEFAULT_CRAWL_PAGES, env.MAX_CRAWL_PAGES),
+    maxCrawlPages: env.MAX_CRAWL_PAGES,
+  }),
+  queue: Object.freeze({
+    driver: env.QUEUE_DRIVER,
+    runWorker: env.RUN_WORKER,
   }),
   render: Object.freeze({
     enabled: env.RENDER_ENABLED,
     timeoutMs: env.RENDER_TIMEOUT_MS,
+    maxPages: env.RENDER_MAX_PAGES,
   }),
   pageSpeed: Object.freeze({
     enabled: env.PAGESPEED_ENABLED,

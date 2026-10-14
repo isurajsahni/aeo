@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router';
 import { AppLayout } from './components/layout/AppLayout.jsx';
 import { GuestRoute, ProtectedRoute } from './components/layout/RouteGuards.jsx';
 import AuditReportPage from './pages/AuditReportPage.jsx';
+import ComparePage from './pages/ComparePage.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 import ProjectDetailPage from './pages/ProjectDetailPage.jsx';
@@ -21,6 +22,7 @@ export default function App() {
           <Route index element={<Navigate to="/projects" replace />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+          <Route path="/projects/:projectId/compare" element={<ComparePage />} />
           <Route path="/audits/:auditId" element={<AuditReportPage />} />
         </Route>
       </Route>

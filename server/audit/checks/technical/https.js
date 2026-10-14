@@ -3,6 +3,7 @@ import { defineCheck, statusFromScore } from '../helpers.js';
 export default defineCheck({
   id: 'https',
   category: 'technical',
+  scope: 'site', // evaluated once per site (from the start page), not per page
   title: 'HTTPS everywhere',
   impact: 'high',
   effort: 'low',

@@ -1,5 +1,5 @@
-import { ArrowLeft, ExternalLink, Pencil, Play, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowLeft, ExternalLink, GitCompareArrows, Pencil, Play, Trash2 } from 'lucide-react';
+import { lazy, Suspense, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { auditsApi, projectsApi } from '../api/endpoints.js';
 import { AuditHistory } from '../components/projects/AuditHistory.jsx';
@@ -12,6 +12,9 @@ import { Modal } from '../components/ui/Modal.jsx';
 import { EmptyState, ErrorState, PageLoader } from '../components/ui/States.jsx';
 import { useAsync } from '../hooks/useAsync.js';
 import { formatDate } from '../lib/format.js';
+
+// Recharts is large and only needed here, so load the chart on demand.
+const ScoreTrend = lazy(() => import('../components/history/ScoreTrend.jsx').then((m) => ({ default: m.ScoreTrend })));
 
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
@@ -53,9 +56,11 @@ export default function ProjectDetailPage() {
     setEditing(false);
   };
 
-  const handleStartAudit = async (url) => {
+  const completedCount = (audits.data?.audits ?? []).filter((a) => a.status === 'completed').length;
+
+  const handleStartAudit = async (options) => {
     try {
-      const { audit } = await auditsApi.start(project.id, { url });
+      const { audit } = await auditsApi.start(project.id, options);
       navigate(`/audits/${audit.id}`);
     } catch (err) {
       // An audit is already running: take the user to it instead of showing an error.
@@ -102,11 +107,25 @@ export default function ProjectDetailPage() {
             title="Audits"
             description="AEO readiness scores for this website over time."
             action={
-              <Button onClick={() => setRunningAudit(true)}>
-                <Play className="size-4" /> Run audit
-              </Button>
+              <div className="flex gap-2">
+                {completedCount >= 2 && (
+                  <Link to={`/projects/${project.id}/compare`} className={buttonClasses({ variant: 'secondary' })}>
+                    <GitCompareArrows className="size-4" /> Compare
+                  </Link>
+                )}
+                <Button onClick={() => setRunningAudit(true)}>
+                  <Play className="size-4" /> Run audit
+                </Button>
+              </div>
             }
           />
+          {completedCount >= 2 && (
+            <div className="border-b border-slate-100">
+              <Suspense fallback={<div className="m-5 h-56 animate-pulse rounded-lg bg-slate-100" />}>
+                <ScoreTrend audits={audits.data.audits} />
+              </Suspense>
+            </div>
+          )}
           <AuditHistory
             audits={audits.data?.audits}
             loading={audits.loading}

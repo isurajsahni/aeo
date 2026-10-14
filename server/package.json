@@ -9,7 +9,9 @@
     "start": "node server.js",
     "seed": "node scripts/seed.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
-    "db:local": "node scripts/devdb.js"
+    "db:local": "node scripts/devdb.js",
+    "worker": "node worker.js",
+    "redis:local": "node scripts/devredis.js"
   },
   "jest": {
     "testEnvironment": "node",
@@ -22,6 +24,7 @@
   "dependencies": {
     "axios": "^1.20.0",
     "bcrypt": "^6.0.0",
+    "bullmq": "^6.3.15",
     "cheerio": "^1.2.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
@@ -30,6 +33,7 @@
     "express-rate-limit": "^8.7.1",
     "fast-xml-parser": "^5.11.2",
     "helmet": "^8.3.0",
+    "ioredis": "^6.0.0",
     "ipaddr.js": "^2.5.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.11.2",
@@ -43,6 +47,7 @@
     "jest": "^30.5.2",
     "mongodb-memory-server": "^11.3.0",
     "pino-pretty": "^13.2.0",
+    "redis-memory-server": "^0.17.1",
     "supertest": "^7.3.1"
   }
 }

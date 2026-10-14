@@ -4,7 +4,7 @@ import { clearTestDB, startTestDB, stopTestDB } from './helpers/db.js';
 
 // Don't actually crawl anything: capture enqueued audits instead.
 const enqueueAudit = jest.fn();
-jest.unstable_mockModule('../services/auditRunner.js', () => ({ enqueueAudit, failInterruptedAudits: jest.fn() }));
+jest.unstable_mockModule('../services/auditRunner.js', () => ({ enqueueAudit, initAuditRunner: jest.fn(), recoverInterruptedAudits: jest.fn(), closeAuditRunner: jest.fn() }));
 
 const { createApp } = await import('../app.js');
 const { Audit } = await import('../models/Audit.js');
@@ -33,6 +33,70 @@ describe('audits API', () => {
 
     expect(res.body.audit).toMatchObject({ url: 'https://example.com/', status: 'queued', crawlConfig: { mode: 'single', maxPages: 1 } });
     expect(enqueueAudit).toHaveBeenCalledTimes(1);
+  });
+
+  test('starts a site crawl with a page limit and validates the limit', async () => {
+    const { agent, projectId } = await setup();
+    const res = await agent.post(`/api/projects/${projectId}/audits`).send({ mode: 'site', maxPages: 10 }).expect(202);
+    expect(res.body.audit.crawlConfig).toMatchObject({ mode: 'site', maxPages: 10 });
+
+    await Audit.updateMany({}, { status: 'completed' });
+    const defaults = await agent.post(`/api/projects/${projectId}/audits`).send({ mode: 'site' }).expect(202);
+    expect(defaults.body.audit.crawlConfig.maxPages).toBe(25);
+
+    await Audit.updateMany({}, { status: 'completed' });
+    const tooMany = await agent.post(`/api/projects/${projectId}/audits`).send({ mode: 'site', maxPages: 5000 }).expect(400);
+    expect(tooMany.body.error.details[0].path).toBe('maxPages');
+  });
+
+  test('marks the audit failed and returns 503 when the queue is down', async () => {
+    const { agent, projectId } = await setup();
+    enqueueAudit.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+    const res = await agent.post(`/api/projects/${projectId}/audits`).send({}).expect(503);
+    expect(res.body.error.code).toBe('QUEUE_UNAVAILABLE');
+    expect(await Audit.findOne({ project: projectId })).toMatchObject({ status: 'failed' });
+  });
+
+  test('streams progress over Server-Sent Events until the audit finishes', async () => {
+    const { agent, projectId } = await setup();
+    const { body } = await agent.post(`/api/projects/${projectId}/audits`).send({}).expect(202);
+    const id = body.audit.id;
+
+    setTimeout(() => Audit.updateOne({ _id: id }, { status: 'running', progress: { stage: 'page', message: 'Fetching the page', percent: 20 } }).exec(), 200);
+    setTimeout(() => Audit.updateOne({ _id: id }, { status: 'completed', scores: { overall: 80, grade: 'B', categories: [] } }).exec(), 1500);
+
+    const res = await agent.get(`/api/audits/${id}/events`).buffer(true).parse((stream, done) => {
+      let text = '';
+      stream.on('data', (chunk) => (text += chunk));
+      stream.on('end', () => done(null, text));
+    });
+
+    expect(res.headers['content-type']).toMatch(/text\/event-stream/);
+    const events = res.body.split('\n\n').filter((block) => block.startsWith('event:')).map((block) => block.split('\n')[0].slice(7));
+    expect(events[0]).toBe('progress');
+    expect(events.at(-1)).toBe('done');
+    expect(res.body).toContain('"percent":20');
+    expect(res.body).toContain('"grade":"B"');
+  }, 15_000);
+
+  test('lists pages worst-first and returns one page with its checks', async () => {
+    const { agent, projectId } = await setup();
+    const { body } = await agent.post(`/api/projects/${projectId}/audits`).send({ mode: 'site', maxPages: 5 }).expect(202);
+    const { Page } = await import('../models/Page.js');
+    const base = { audit: body.audit.id, project: projectId };
+    await Page.create([
+      { ...base, url: 'https://example.com/', score: 90, checks: [{ id: 'meta-title', category: 'technical', status: 'pass', score: 100 }] },
+      { ...base, url: 'https://example.com/bad', score: 40 },
+      { ...base, url: 'https://example.com/broken', statusCode: 500, error: { code: 'PAGE_HTTP_ERROR', message: 'HTTP 500' } },
+    ]);
+
+    const list = await agent.get(`/api/audits/${body.audit.id}/pages`).expect(200);
+    expect(list.body.pages.map((p) => p.url)).toEqual(['https://example.com/bad', 'https://example.com/', 'https://example.com/broken']);
+    expect(list.body.pages[0].checks).toBeUndefined();
+
+    const home = list.body.pages.find((p) => p.score === 90);
+    const detail = await agent.get(`/api/audits/${body.audit.id}/pages/${home.id}`).expect(200);
+    expect(detail.body.page.checks[0].id).toBe('meta-title');
   });
 
   test('accepts a specific page on the project domain (or a subdomain) but rejects other sites', async () => {

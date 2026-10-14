@@ -31,3 +31,18 @@ services:
         sync: false # optional, e.g. @youragency.com
       - key: PAGESPEED_API_KEY
         sync: false # optional
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: aeo-audit-redis
+          property: connectionString
+      - key: QUEUE_DRIVER
+        value: bullmq # fail loudly if Redis is missing, rather than falling back to in-process
+
+  # Redis-compatible store for the BullMQ audit queue.
+  - type: keyvalue
+    name: aeo-audit-redis
+    region: singapore
+    plan: free
+    maxmemoryPolicy: noeviction # BullMQ must never have its job keys evicted
+    ipAllowList: [] # reachable only from services in this Render account

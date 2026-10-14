@@ -1,4 +1,4 @@
-import { ArrowLeft, Clock, ExternalLink, RotateCcw, XCircle } from 'lucide-react';
+import { ArrowLeft, Clock, ExternalLink, Network, RotateCcw, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { auditsApi } from '../api/endpoints.js';
@@ -6,6 +6,7 @@ import { AuditProgress } from '../components/report/AuditProgress.jsx';
 import { CategoryCards } from '../components/report/CategoryCards.jsx';
 import { CheckList } from '../components/report/CheckList.jsx';
 import { FixList } from '../components/report/FixList.jsx';
+import { PagesTable } from '../components/report/PagesTable.jsx';
 import { ScoreGauge } from '../components/report/ScoreGauge.jsx';
 import { Button, buttonClasses } from '../components/ui/Button.jsx';
 import { Card } from '../components/ui/Card.jsx';
@@ -19,7 +20,7 @@ const formatDuration = (ms) => (ms == null ? null : ms < 60_000 ? `${Math.round(
 export default function AuditReportPage() {
   const { auditId } = useParams();
   const navigate = useNavigate();
-  const { audit, error, loading } = useAudit(auditId);
+  const { audit, error, loading, live } = useAudit(auditId);
   const [activeCategory, setActiveCategory] = useState(null);
   const [focusCheck, setFocusCheck] = useState(null);
   const [rerun, setRerun] = useState({ loading: false, error: '' });
@@ -31,11 +32,13 @@ export default function AuditReportPage() {
   const categoryNames = useMemo(() => Object.fromEntries(categories.map((c) => [c.id, c.name])), [categories]);
 
   const projectId = audit?.project;
+  const isSite = audit?.crawlConfig?.mode === 'site';
 
   const runAgain = async () => {
     setRerun({ loading: true, error: '' });
     try {
-      const { audit: next } = await auditsApi.start(projectId, { url: audit.url });
+      const { mode, maxPages } = audit.crawlConfig ?? {};
+      const { audit: next } = await auditsApi.start(projectId, mode === 'site' ? { url: audit.url, mode, maxPages } : { url: audit.url });
       navigate(`/audits/${next.id}`);
       setRerun({ loading: false, error: '' });
     } catch (err) {
@@ -70,7 +73,7 @@ export default function AuditReportPage() {
     return (
       <div className="space-y-6">
         {backLink}
-        <AuditProgress audit={audit} />
+        <AuditProgress audit={audit} live={live} />
       </div>
     );
   }
@@ -103,7 +106,7 @@ export default function AuditReportPage() {
         <div className="flex flex-col items-center gap-6 md:flex-row md:items-center">
           <ScoreGauge score={audit.scores.overall} grade={audit.scores.grade} />
           <div className="min-w-0 flex-1 text-center md:text-left">
-            <h1 className="text-xl font-semibold text-slate-900">AEO readiness report</h1>
+            <h1 className="text-xl font-semibold text-slate-900">{isSite ? 'Site-wide AEO readiness report' : 'AEO readiness report'}</h1>
             <a
               href={audit.finalUrl ?? audit.url}
               target="_blank"
@@ -121,6 +124,11 @@ export default function AuditReportPage() {
                 </span>
               )}
               <span>{audit.checks.length} checks</span>
+              {isSite && (
+                <span className="inline-flex items-center gap-1">
+                  <Network className="size-3.5" /> {audit.pageCount} pages crawled
+                </span>
+              )}
             </div>
           </div>
           <div className="flex flex-col items-center gap-2">
@@ -150,6 +158,8 @@ export default function AuditReportPage() {
           <CheckList checks={audit.checks} categories={categories} activeCategory={activeCategory} focusCheck={focusCheck} />
         </div>
       </div>
+
+      {isSite && <PagesTable auditId={audit.id} crawlStats={audit.crawlStats} />}
     </div>
   );
 }

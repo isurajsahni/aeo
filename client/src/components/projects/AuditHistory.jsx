@@ -49,7 +49,14 @@ export function AuditHistory({ audits, loading, error, onRetry, emptyAction }) {
               <span className="size-9" aria-hidden="true" />
             )}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-900">{pathOf(audit.url)}</p>
+              <p className="flex items-center gap-2 truncate text-sm font-medium text-slate-900">
+                <span className="truncate">{pathOf(audit.url)}</span>
+                {audit.crawlConfig?.mode === 'site' && (
+                  <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                    Site · {audit.status === 'completed' ? audit.pageCount : `up to ${audit.crawlConfig.maxPages}`} pages
+                  </span>
+                )}
+              </p>
               <p className="text-xs text-slate-500" title={formatDate(audit.createdAt)}>
                 {formatRelative(audit.createdAt)}
                 {audit.status === 'failed' && audit.error?.message && <span className="text-red-600"> · {audit.error.message}</span>}

@@ -2,12 +2,13 @@ import { createApp } from './app.js';
 import { config } from './config/index.js';
 import { closeBrowser } from './audit/crawler/renderPage.js';
 import { connectDB, disconnectDB } from './config/db.js';
-import { failInterruptedAudits } from './services/auditRunner.js';
+import { closeAuditRunner, initAuditRunner, recoverInterruptedAudits } from './services/auditRunner.js';
 import { logger } from './utils/logger.js';
 
 async function start() {
   await connectDB(config.mongoUri);
-  await failInterruptedAudits();
+  await initAuditRunner();
+  await recoverInterruptedAudits();
 
   const server = createApp().listen(config.port, () => {
     logger.info(`API listening on http://localhost:${config.port} (${config.env})`);
@@ -24,6 +25,7 @@ async function start() {
     timer.unref();
 
     server.close(async () => {
+      await closeAuditRunner();
       await closeBrowser();
       await disconnectDB().catch((err) => logger.error({ err }, 'Error closing MongoDB'));
       process.exit(0);

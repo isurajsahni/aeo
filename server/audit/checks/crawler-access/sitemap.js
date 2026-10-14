@@ -3,6 +3,7 @@ import { daysSince, defineCheck, statusFromScore } from '../helpers.js';
 export default defineCheck({
   id: 'sitemap',
   category: 'crawlerAccess',
+  scope: 'site', // evaluated once per site (from the start page), not per page
   title: 'XML sitemap with fresh lastmod dates',
   impact: 'medium',
   effort: 'low',

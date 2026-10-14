@@ -1,7 +1,8 @@
 /**
  * Shared helpers for check modules.
  *
- * A check module default-exports defineCheck({ id, category, title, impact, effort, run }).
+ * A check module default-exports defineCheck({ id, category, title, impact, effort, scope?, run }).
+ * `scope` is 'page' (default: averaged across pages in a site crawl) or 'site' (taken from the start page).
  * `run(ctx)` is a pure function of the audit context and returns:
  *   { score: 0-100, status?: 'pass'|'warn'|'fail', details?, recommendation?, impact?, effort? }
  * or skip(reason) when the check doesn't apply. The runner adds the weight from
@@ -18,7 +19,7 @@ export function defineCheck(definition) {
   if (!IMPACTS.has(definition.impact) || !IMPACTS.has(definition.effort)) {
     throw new Error(`Check ${id} must declare impact and effort as high|medium|low`);
   }
-  return Object.freeze(definition);
+  return Object.freeze({ scope: 'page', ...definition });
 }
 
 /** Map a 0-100 score to a status. Thresholds can be tuned per check. */

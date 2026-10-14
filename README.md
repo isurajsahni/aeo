@@ -2,8 +2,8 @@
 
 Audit a website's **Answer Engine Optimization** readiness: how well it can be found, understood and cited by AI assistants such as ChatGPT, Claude, Perplexity and Gemini. Built for agencies auditing client websites.
 
-> **Status: Phase 2 of 5.** Auth, projects, and a single-page audit engine (31 checks across categories A-E) with scoring and a report UI.
-> Next: BullMQ queue, site crawl and audit history (Phase 3), AI visibility testing (Phase 4), and competitors, PDF export and scheduling (Phase 5).
+> **Status: Phase 3 of 5.** Auth, projects, a 31-check audit engine, single-page audits and site crawls on a BullMQ queue, live progress, audit history with trends, and audit comparison.
+> Next: AI visibility testing (Phase 4), then competitors, PDF export and scheduling (Phase 5).
 
 ## Stack
 
@@ -50,7 +50,7 @@ Optional: add a free [PageSpeed Insights API key](https://developers.google.com/
 npm run services:up      # docker compose up -d
 ```
 
-No Docker? `npm run db:local` starts a local MongoDB (data persisted in `server/storage/mongo`). Redis isn't needed until Phase 3.
+No Docker? `npm run db:local` starts a local MongoDB (data persisted in `server/storage/mongo`) and `npm run redis:local` a local Redis, each in its own terminal. Without Redis the app still runs: audits fall back to an in-process runner (see *Job queue* below).
 
 ### 5. Seed a demo account (optional)
 
@@ -81,7 +81,8 @@ In development, Vite proxies `/api` to the server, so the auth cookie is same-or
 | `npm run build` | Production build of the client into `client/dist` |
 | `npm start` | Start the API without watch mode |
 | `npm run services:up` / `services:down` | Start/stop MongoDB + Redis containers |
-| `npm run db:local` | Local MongoDB without Docker (dev only) |
+| `npm run db:local` / `redis:local` | Local MongoDB / Redis without Docker (dev only) |
+| `npm run worker` | Standalone audit worker (with `RUN_WORKER=false` on the API) |
 
 ## Project structure
 
@@ -126,10 +127,12 @@ All responses are JSON. Errors always look like this:
 | PATCH | `/api/projects/:id` | ✓ | any subset of the create fields |
 | DELETE | `/api/projects/:id` | ✓ | also deletes its audits |
 | GET | `/api/projects/:id/audits` | ✓ | audit history (no check payloads) |
-| POST | `/api/projects/:id/audits` | ✓ | `{ url? }`: starts an audit (202). Defaults to the homepage; the URL must be on the project domain. 409 if one is already running |
+| POST | `/api/projects/:id/audits` | ✓ | `{ url?, mode?: 'single' \| 'site', maxPages? }`: starts an audit (202). Defaults to a single-page audit of the homepage; the URL must be on the project domain. 409 if one is already running |
 | GET | `/api/audits/:id` | ✓ | full results: scores, fixes, checks |
 | GET | `/api/audits/:id/status` | ✓ | lightweight progress for polling |
-| GET | `/api/audits/:id/pages` | ✓ | per-page data |
+| GET | `/api/audits/:id/events` | ✓ | Server-Sent Events: `progress` events until a final `done` |
+| GET | `/api/audits/:id/pages` | ✓ | per-page results, worst first (no check payloads) |
+| GET | `/api/audits/:id/pages/:pageId` | ✓ | one page with all its check results |
 | DELETE | `/api/audits/:id` | ✓ | |
 
 Domains can be entered as `example.com` or as a full URL. They are stored as a bare lowercase hostname. Localhost, private-network suffixes, raw IP addresses and non-http(s) schemes are rejected. The Phase 2 crawler adds DNS-level SSRF checks on every request and after every redirect.
@@ -151,6 +154,18 @@ Weights and grade bands live in [`server/config/scoring.json`](server/config/sco
 | E. Technical Basics | HTTPS + redirect + HSTS, status/redirect chain, title and meta description length, Core Web Vitals, canonical, Open Graph, lang/viewport |
 
 Checks that don't apply (e.g. bylines on a homepage) are marked *not applicable* and excluded from the score.
+
+### Site crawls
+
+A site crawl audits up to `maxPages` pages (default 25, cap `MAX_CRAWL_PAGES`). It visits the start page's links first, then sitemap URLs, then links found on later pages, staying on the same host and skipping files and app paths such as `/cart` and `/wp-admin`. robots.txt is respected for our crawler token. JavaScript rendering runs on the first `RENDER_MAX_PAGES` pages, and Core Web Vitals on the start page only.
+
+Each page runs every check. Results are combined per check: **page** checks are averaged across the pages where they apply, count as passing only if every page passes, and list the worst pages; **site** checks (llms.txt, sitemap, HTTPS, Core Web Vitals) come from the start page. Every page's own results are stored and shown in the report's pages table.
+
+### Job queue
+
+Audits run as BullMQ jobs in Redis, with job id = audit id, so the same audit is never queued twice. Jobs survive restarts, and a crashed or stalled job is retried once. The worker runs inside the API process by default (`RUN_WORKER=true`); set it to false and run `npm run worker` to process audits on a separate machine. With `QUEUE_DRIVER=auto` (the default) the API uses an in-process runner when Redis is unreachable, and logs a warning. Use `QUEUE_DRIVER=bullmq` in production to require Redis.
+
+Live progress reaches the browser over Server-Sent Events. The stream reads progress from MongoDB, so it works wherever the worker runs. The client falls back to polling if a proxy blocks the stream.
 
 ### Crawler safety
 

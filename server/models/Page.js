@@ -13,16 +13,24 @@ const pageSchema = new mongoose.Schema(
     title: String,
     wordCount: Number,
     schemaTypes: [String],
+    depth: { type: Number, default: 0 },
+    // JavaScript rendering ran for this page (capped per crawl).
+    rendered: { type: Boolean, default: false },
     score: Number,
     grade: String,
+    issues: { fail: { type: Number, default: 0 }, warn: { type: Number, default: 0 } },
     checks: [checkResultSchema],
     fetchMs: Number,
+    // Set when the page could not be audited (HTTP error, not HTML, network failure).
+    error: { message: String, code: String },
   },
   { timestamps: true },
 );
 
 pageSchema.index({ audit: 1, url: 1 }, { unique: true });
 pageSchema.index({ project: 1 });
+// Pages table: worst pages first.
+pageSchema.index({ audit: 1, score: 1 });
 
 pageSchema.plugin(toJSONPlugin);
 

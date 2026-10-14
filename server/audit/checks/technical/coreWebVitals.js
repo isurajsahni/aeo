@@ -14,6 +14,7 @@ const points = { good: 100, 'needs improvement': 50, poor: 0 };
 export default defineCheck({
   id: 'core-web-vitals',
   category: 'technical',
+  scope: 'site', // evaluated once per site (from the start page), not per page
   title: 'Core Web Vitals (mobile)',
   impact: 'medium',
   effort: 'high',

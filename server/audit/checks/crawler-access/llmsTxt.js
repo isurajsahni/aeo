@@ -19,6 +19,7 @@ export function analyzeLlmsTxt(text) {
 export default defineCheck({
   id: 'llms-txt',
   category: 'crawlerAccess',
+  scope: 'site', // evaluated once per site (from the start page), not per page
   title: 'llms.txt file',
   impact: 'low',
   effort: 'low',

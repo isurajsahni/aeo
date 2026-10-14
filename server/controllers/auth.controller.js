@@ -1,5 +1,6 @@
 import { clearAuthCookie, setAuthCookie } from '../middleware/auth.js';
 import { authenticateUser, registerUser } from '../services/auth.service.js';
+import { config } from '../config/index.js';
 import { registrationStatus } from '../services/registration.js';
 import { signToken } from '../utils/jwt.js';
 
@@ -21,7 +22,7 @@ export function logout(_req, res) {
 }
 
 export function publicConfig(_req, res) {
-  res.json(registrationStatus());
+  res.json({ ...registrationStatus(), crawl: { defaultPages: config.crawler.defaultCrawlPages, maxPages: config.crawler.maxCrawlPages } });
 }
 
 export function me(req, res) {

@@ -88,6 +88,8 @@ async function gatherSitemap(fetcher, origin, robots, pageUrl) {
       }
 
       Object.assign(result, summarizeSitemapEntries(parsed.entries));
+      // A sample of URLs seeds site crawls.
+      result.urls = parsed.entries.slice(0, 1000).map((e) => e.loc);
       const normalized = (u) => u.replace(/\/$/, '').replace('://www.', '://');
       result.includesAuditedUrl = parsed.entries.some((e) => normalized(e.loc) === normalized(pageUrl));
       if (result.indexNewestLastmod && (!result.newestLastmod || result.indexNewestLastmod > result.newestLastmod)) {
@@ -101,24 +103,26 @@ async function gatherSitemap(fetcher, origin, robots, pageUrl) {
   return result;
 }
 
+const HTML_ACCEPT = 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5';
+
+/** Why a fetched response can't be audited as a page, or null if it can. */
+export function pageProblem(page) {
+  if (page.error) return { code: page.error.code ?? 'FETCH_FAILED', message: page.error.message };
+  if (page.status >= 400) return { code: 'PAGE_HTTP_ERROR', message: `${page.url} returned HTTP ${page.status}` };
+  if (!isHtml(page.contentType, page.text)) return { code: 'NOT_HTML', message: `${page.url} is not an HTML page (content-type: ${page.contentType || 'unknown'})` };
+  return null;
+}
+
+/** Fetch a page for auditing; returns { error } instead of throwing (used by the crawler). */
+export const fetchPage = (fetcher, url) => fetcher.tryFetch(url, { accept: HTML_ACCEPT });
+
 /**
- * Fetch everything an audit of one page needs. Network-facing; dependencies are
- * injectable so the whole pipeline can run against fixtures in tests.
+ * Site-level gathering, done once per audit: robots.txt (respected for our own token),
+ * the start page, llms.txt, the sitemap and the http:// variant.
  */
-export async function gatherContext(
-  url,
-  {
-    fetcher = new PoliteFetcher(),
-    render = renderPage,
-    pageSpeed = fetchCoreWebVitals,
-    renderEnabled = config.render.enabled,
-    pageSpeedEnabled = config.pageSpeed.enabled,
-    onProgress = () => {},
-  } = {},
-) {
+export async function gatherSite(url, { fetcher = new PoliteFetcher(), onProgress = () => {} } = {}) {
   const requested = new URL(url);
 
-  // 1. robots.txt: we respect it for our own crawler token, and audit it for AI bots.
   await onProgress('robots', 'Reading robots.txt', 10);
   let robots = buildRobots(`${requested.origin}/robots.txt`, await fetcher.tryFetch(`${requested.origin}/robots.txt`, { accept: 'text/plain' }));
   const assertAllowed = (target) => {
@@ -130,29 +134,21 @@ export async function gatherContext(
   const crawlDelay = robots.parser.getCrawlDelay(config.crawler.robotsToken);
   if (crawlDelay) fetcher.setDelay(Math.min(crawlDelay * 1000, MAX_ROBOTS_CRAWL_DELAY_MS));
 
-  // 2. The page itself.
   await onProgress('page', 'Fetching the page', 20);
-  let page;
-  try {
-    page = await fetcher.fetch(requested.href, { accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5' });
-  } catch (err) {
-    throw new AppError(422, `Could not fetch ${requested.href}: ${err.message}`, { code: err.code ?? 'FETCH_FAILED' });
-  }
-  if (page.status >= 400) {
-    throw new AppError(422, `${page.url} returned HTTP ${page.status}. Check the URL and try again.`, { code: 'PAGE_HTTP_ERROR' });
-  }
-  if (!isHtml(page.contentType, page.text)) {
-    throw new AppError(422, `${page.url} is not an HTML page (content-type: ${page.contentType || 'unknown'})`, { code: 'NOT_HTML' });
+  const startPage = await fetchPage(fetcher, requested.href);
+  const problem = pageProblem(startPage);
+  if (problem) {
+    const message = problem.code === 'PAGE_HTTP_ERROR' ? `${problem.message}. Check the URL and try again.` : `Could not audit ${requested.href}: ${problem.message}`;
+    throw new AppError(422, message, { code: problem.code });
   }
 
   // Redirected to another origin (e.g. apex -> www)? Use that origin's robots.txt from here on.
-  const final = new URL(page.url);
+  const final = new URL(startPage.url);
   if (final.origin !== requested.origin) {
     robots = buildRobots(`${final.origin}/robots.txt`, await fetcher.tryFetch(`${final.origin}/robots.txt`, { accept: 'text/plain' }));
     assertAllowed(final.href);
   }
 
-  // 3. Site-level AI discovery files.
   await onProgress('discovery', 'Checking llms.txt and sitemap', 35);
   const llms = await fetcher.tryFetch(`${final.origin}/llms.txt`, { accept: 'text/markdown,text/plain;q=0.9,*/*;q=0.5' });
   const sitemap = await gatherSitemap(fetcher, final.origin, robots, final.href);
@@ -163,28 +159,50 @@ export async function gatherContext(
     httpVariant = { status: res.status, finalUrl: res.url, redirectsToHttps: Boolean(res.url?.startsWith('https:')), error: res.error?.message };
   }
 
-  // 4. JS rendering and Core Web Vitals are slow and independent, so run them in parallel.
-  await onProgress('render', 'Rendering JavaScript and measuring Core Web Vitals', 55);
-  const [rendered, vitals] = await Promise.allSettled([
-    renderEnabled ? render(final.href) : Promise.reject(new Error('JavaScript rendering is disabled (RENDER_ENABLED=false)')),
-    pageSpeedEnabled ? pageSpeed(final.href) : Promise.reject(new Error('PageSpeed Insights is disabled (PAGESPEED_ENABLED=false)')),
-  ]);
-
-  const describeVitalsError = (err) =>
-    err?.response?.status === 429
-      ? 'PageSpeed Insights quota exceeded. Add a PAGESPEED_API_KEY to .env for reliable results.'
-      : `PageSpeed Insights failed: ${err?.response?.data?.error?.message ?? err?.message}`;
-
-  return buildContext({
-    url: requested.href,
-    page,
+  return {
+    requestedUrl: requested.href,
+    startPage,
     robots,
     llmsTxt: { url: `${final.origin}/llms.txt`, status: llms.status, contentType: llms.contentType ?? '', text: llms.text?.slice(0, 200_000) ?? null, finalUrl: llms.url, error: llms.error },
     sitemap,
     httpVariant,
+  };
+}
+
+const describeVitalsError = (err) =>
+  err?.response?.status === 429
+    ? 'PageSpeed Insights quota exceeded. Add a PAGESPEED_API_KEY to .env for reliable results.'
+    : `PageSpeed Insights failed: ${err?.response?.data?.error?.message ?? err?.message}`;
+
+/**
+ * Slow, optional per-page extras: the JS-rendered DOM and Core Web Vitals, in parallel.
+ * Pass a string instead of `true` for an enabled flag to skip with that reason.
+ */
+export async function gatherPageExtras(url, { render = renderPage, pageSpeed = fetchCoreWebVitals, renderEnabled = config.render.enabled, pageSpeedEnabled = config.pageSpeed.enabled } = {}) {
+  const skipReason = (flag, fallback) => Promise.reject(new Error(typeof flag === 'string' ? flag : fallback));
+  const [rendered, vitals] = await Promise.allSettled([
+    renderEnabled === true ? render(url) : skipReason(renderEnabled, 'JavaScript rendering is disabled (RENDER_ENABLED=false)'),
+    pageSpeedEnabled === true ? pageSpeed(url) : skipReason(pageSpeedEnabled, 'PageSpeed Insights is disabled (PAGESPEED_ENABLED=false)'),
+  ]);
+  return {
     renderedHtml: rendered.status === 'fulfilled' ? rendered.value.html : null,
     renderError: rendered.status === 'rejected' ? rendered.reason.message : null,
     pageSpeed: vitals.status === 'fulfilled' ? vitals.value : null,
-    pageSpeedError: vitals.status === 'rejected' ? describeVitalsError(vitals.reason) : null,
-  });
+    pageSpeedError: vitals.status === 'rejected' ? (typeof pageSpeedEnabled === 'string' ? pageSpeedEnabled : describeVitalsError(vitals.reason)) : null,
+  };
+}
+
+/** Combine site-level data, one fetched page and its extras into a check context. */
+export const contextFor = (site, page, extras = {}) =>
+  buildContext({ url: page.requestedUrl ?? page.url, page, robots: site.robots, llmsTxt: site.llmsTxt, sitemap: site.sitemap, httpVariant: site.httpVariant, ...extras });
+
+/**
+ * Fetch everything a single-page audit needs. Network-facing; dependencies are
+ * injectable so the whole pipeline can run against fixtures in tests.
+ */
+export async function gatherContext(url, { fetcher = new PoliteFetcher(), onProgress = () => {}, ...extrasOptions } = {}) {
+  const site = await gatherSite(url, { fetcher, onProgress });
+  await onProgress('render', 'Rendering JavaScript and measuring Core Web Vitals', 55);
+  const extras = await gatherPageExtras(site.startPage.url, extrasOptions);
+  return contextFor({ ...site }, { ...site.startPage, requestedUrl: site.requestedUrl }, extras);
 }

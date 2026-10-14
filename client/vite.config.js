@@ -7,10 +7,11 @@ export default defineConfig({
   // Read VITE_* variables from the shared .env at the repo root.
   envDir: '..',
   server: {
-    port: 5173,
+    // Override when the defaults are taken: CLIENT_PORT=5174 API_PORT=4100 npm run dev
+    port: Number(process.env.CLIENT_PORT ?? 5173),
     // Proxy API calls in development so the auth cookie is same-origin.
     proxy: {
-      '/api': { target: 'http://localhost:4000', changeOrigin: true },
+      '/api': { target: `http://localhost:${process.env.API_PORT ?? process.env.PORT ?? 4000}`, changeOrigin: true },
     },
   },
 });
